@@ -7,10 +7,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#[cfg(feature = "std")]
-use std::fmt;
-#[cfg(not(feature = "std"))]
-use core::fmt;
+use std_facade::fmt;
 
 /// Easily define `proptest` tests.
 ///
@@ -24,7 +21,7 @@ use core::fmt;
 /// strategies. Note that the inputs are borrowed from the test runner, so if
 /// they are not `Copy`, you will need to use `ref` with each parameter name.
 ///
-/// Example:
+/// ### Example
 ///
 /// ```
 /// #[macro_use] extern crate proptest;
@@ -73,6 +70,49 @@ use core::fmt;
 /// #
 /// # fn main() { test_addition(); }
 /// ```
+///
+/// ## Closure-Style Invocation
+///
+/// As of proptest 0.8.1, an alternative, "closure-style" invocation is
+/// supported. These make it possible to run multiple tests that require some
+/// expensive setup process. Note that the "fork" and "timeout" features are
+/// _not_ supported in closure style. There is currently no way to specify a
+/// custom configuration for closure style.
+///
+/// ### Example
+///
+/// ```
+/// #[macro_use] extern crate proptest;
+///
+/// #[derive(Debug)]
+/// struct BigStruct { /* Lots of fields ... */ }
+///
+/// fn very_expensive_function() -> BigStruct {
+///   // Lots of code...
+///   BigStruct { /* fields */ }
+/// }
+///
+/// # /*
+/// #[test]
+/// # */
+/// fn my_test() {
+///   // We create just one `BigStruct`
+///   let big_struct = very_expensive_function();
+///
+///   // But now can run multiple tests without needing to build it every time.
+///   // Braces around the test body are currently required.
+///   proptest!(|(x in 0u32..42u32, y in 1000u32..100000u32)| {
+///     // Test stuff
+///   });
+///
+///   // `move` closures are also supported
+///   proptest!(move |(x in 0u32..42u32)| {
+///     // Test other stuff
+///   });
+/// }
+/// #
+/// # fn main() { my_test(); }
+/// ```
 #[macro_export]
 macro_rules! proptest {
     (#![proptest_config($config:expr)]
@@ -83,25 +123,10 @@ macro_rules! proptest {
         $(
             $(#[$meta])*
             fn $test_name() {
-                let mut config = $config.clone_with_source_file(file!());
+                let mut config = $config.clone();
                 config.test_name = Some(
                     concat!(module_path!(), "::", stringify!($test_name)));
-                let mut runner = $crate::test_runner::TestRunner::new(config);
-                let names = proptest_helper!(@_WRAPSTR ($($parm),*));
-                match runner.run(
-                    &$crate::strategy::Strategy::prop_map(
-                        proptest_helper!(@_WRAP ($($strategy)*)),
-                        |values| $crate::sugar::NamedArguments(names, values)),
-                    |&$crate::sugar::NamedArguments(
-                        _, proptest_helper!(@_WRAPPAT ($($parm),*)))|
-                    {
-                        $body;
-                        Ok(())
-                    })
-                {
-                    Ok(_) => (),
-                    Err(e) => panic!("{}\n{}", e, runner),
-                }
+                proptest_helper!(@_BODY config ($($parm in $strategy),+) [] $body);
             }
         )*
     };
@@ -113,6 +138,18 @@ macro_rules! proptest {
         #![proptest_config($crate::test_runner::Config::default())]
         $($(#[$meta])*
           fn $test_name($($parm in $strategy),+) $body)*
+    } };
+
+    (|($($parm:pat in $strategy:expr),+)| $body:block) => { {
+        let mut config = $crate::test_runner::Config::default();
+        $crate::sugar::force_no_fork(&mut config);
+        proptest_helper!(@_BODY config ($($parm in $strategy),+) [] $body)
+    } };
+
+    (move |($($parm:pat in $strategy:expr),+)| $body:block) => { {
+        let mut config = $crate::test_runner::Config::default();
+        $crate::sugar::force_no_fork(&mut config);
+        proptest_helper!(@_BODY config ($($parm in $strategy),+) [move] $body)
     } };
 }
 
@@ -329,7 +366,7 @@ macro_rules! prop_oneof {
 /// used to generate the other inputs for the function. The second argument
 /// list has access to all arguments in the first. The return type indicates
 /// the type of value being generated; the final return type of the function is
-/// `BoxedStrategy<$type>`.
+/// `impl Strategy<Value = $type>`.
 ///
 /// ```rust,no_run
 /// # #![allow(dead_code)]
@@ -436,14 +473,13 @@ macro_rules! prop_compose {
      ($($var:pat in $strategy:expr),+ $(,)*)
        -> $return_type:ty $body:block) =>
     {
+        #[must_use = "strategies do nothing unless used"]
         $(#[$meta])*
         $($($vis)*)* fn $name $params
-                 -> $crate::strategy::BoxedStrategy<$return_type> {
+                 -> impl $crate::strategy::Strategy<Value = $return_type> {
             let strat = proptest_helper!(@_WRAP ($($strategy)*));
-            let strat = $crate::strategy::Strategy::prop_map(
-                strat,
-                |proptest_helper!(@_WRAPPAT ($($var),*))| $body);
-            $crate::strategy::Strategy::boxed(strat)
+            $crate::strategy::Strategy::prop_map(strat,
+                |proptest_helper!(@_WRAPPAT ($($var),*))| $body)
         }
     };
 
@@ -453,18 +489,17 @@ macro_rules! prop_compose {
      ($($var2:pat in $strategy2:expr),+ $(,)*)
        -> $return_type:ty $body:block) =>
     {
+        #[must_use = "strategies do nothing unless used"]
         $(#[$meta])*
         $($($vis)*)* fn $name $params
-                 -> $crate::strategy::BoxedStrategy<$return_type> {
+                 -> impl $crate::strategy::Strategy<Value = $return_type> {
             let strat = proptest_helper!(@_WRAP ($($strategy)*));
             let strat = $crate::strategy::Strategy::prop_flat_map(
                 strat,
                 |proptest_helper!(@_WRAPPAT ($($var),*))|
                 proptest_helper!(@_WRAP ($($strategy2)*)));
-            let strat = $crate::strategy::Strategy::prop_map(
-                strat,
-                |proptest_helper!(@_WRAPPAT ($($var2),*))| $body);
-            $crate::strategy::Strategy::boxed(strat)
+            $crate::strategy::Strategy::prop_map(strat,
+                |proptest_helper!(@_WRAPPAT ($($var2),*))| $body)
         }
     };
 }
@@ -679,6 +714,26 @@ macro_rules! proptest_helper {
     (@_WRAPSTR ($a:pat, $($rest:pat),*)) => {
         (stringify!($a), proptest_helper!(@_WRAPSTR ($($rest),*)))
     };
+    // build a property testing block that when executed, executes the full property test.
+    (@_BODY $config:ident ($($parm:pat in $strategy:expr),+) [$($mod:tt)*] $body:block) => {{
+        $config.source_file = Some(file!());
+        let mut runner = $crate::test_runner::TestRunner::new($config);
+        let names = proptest_helper!(@_WRAPSTR ($($parm),*));
+        match runner.run(
+            &$crate::strategy::Strategy::prop_map(
+                proptest_helper!(@_WRAP ($($strategy)*)),
+                |values| $crate::sugar::NamedArguments(names, values)),
+            $($mod)* |$crate::sugar::NamedArguments(
+                _, proptest_helper!(@_WRAPPAT ($($parm),*)))|
+            {
+                $body;
+                Ok(())
+            })
+        {
+            Ok(_) => (),
+            Err(e) => panic!("{}\n{}", e, runner),
+        }
+    }};
 }
 
 #[doc(hidden)]
@@ -796,6 +851,26 @@ macro_rules! prop_assert_ne {
     }};
 }
 
+#[cfg(feature = "std")]
+#[doc(hidden)]
+pub fn force_no_fork(config: &mut ::test_runner::Config) {
+    if config.fork() {
+        eprintln!("proptest: Forking/timeout not supported in closure-style \
+                   invocations; ignoring");
+
+        #[cfg(feature = "fork")] {
+            config.fork = false;
+        }
+        #[cfg(feature = "timeout")] {
+            config.timeout = 0;
+        }
+        assert!(!config.fork());
+    }
+}
+
+#[cfg(not(feature = "std"))]
+pub fn force_no_fork(_: &mut ::test_runner::Config) { }
+
 #[cfg(test)]
 mod test {
     use ::strategy::Just;
@@ -910,8 +985,9 @@ mod test {
 
     #[test]
     fn oneof_all_counts() {
-        fn expect_count<S : ::strategy::Strategy>(n: usize, s: S)
-        where S::Value : ::strategy::ValueTree<Value = i32> {
+        use ::strategy::{Strategy, TupleUnion, Union, Just as J};
+
+        fn expect_count(n: usize, s: impl Strategy<Value = i32>) {
             use std::collections::HashSet;
             use strategy::*;
             use test_runner::*;
@@ -919,21 +995,15 @@ mod test {
             let mut runner = TestRunner::default();
             let mut seen = HashSet::new();
             for _ in 0..1024 {
-                seen.insert(s.new_value(&mut runner).unwrap().current());
+                seen.insert(s.new_tree(&mut runner).unwrap().current());
             }
 
             assert_eq!(n, seen.len());
         }
 
-        fn assert_static<T>(v: ::strategy::TupleUnion<T>)
-                            -> ::strategy::TupleUnion<T>
-        { v }
+        fn assert_static<T>(v: TupleUnion<T>) -> TupleUnion<T> { v }
+        fn assert_dynamic<T: Strategy>(v: Union<T>) -> Union<T> { v }
 
-        fn assert_dynamic<T : ::strategy::Strategy>
-            (v: ::strategy::Union<T>) -> ::strategy::Union<T>
-        { v }
-
-        use strategy::Just as J;
         expect_count(1, prop_oneof![J(0i32)]);
         expect_count(2, assert_static(prop_oneof![
             J(0i32),
@@ -1043,5 +1113,75 @@ mod another_test {
     #[allow(dead_code)]
     fn can_access_pub_compose() {
         let _ = sugar::test::two_ints_pub(42);
+    }
+}
+
+#[cfg(test)]
+mod ownership_tests {
+    #[cfg(feature = "std")]
+    proptest! {
+        #[test]
+        fn accept_ref_arg(ref s in "[0-9]") {
+            use std_facade::String;
+            fn assert_string(_s: &String) {}
+            assert_string(s);
+        }
+
+        #[test]
+        fn accept_move_arg(s in "[0-9]") {
+            use std_facade::String;
+            fn assert_string(_s: String) {}
+            assert_string(s);
+        }
+    }
+
+    #[derive(Debug)]
+    struct NotClone();
+    const MK: fn() -> NotClone = NotClone;
+
+    proptest! {
+        #[test]
+        fn accept_noclone_arg(nc in MK) {
+            let _nc2: NotClone = nc;
+        }
+
+        #[test]
+        fn accept_noclone_ref_arg(ref nc in MK) {
+            let _nc2: &NotClone = nc;
+        }
+    }
+}
+
+#[cfg(test)]
+mod closure_tests {
+    #[test]
+    fn test_simple() {
+        let x = 420;
+
+        proptest!(|(y in 0..100)| {
+            println!("{}", y);
+            assert!(x != y);
+        });
+    }
+
+    #[test]
+    fn test_move() {
+        let foo = Foo;
+
+        proptest!(move |(x in 1..100, y in 0..100)| {
+            assert!(x + y > 0, "foo: {:?}", foo);
+        });
+
+        #[derive(Debug)]
+        struct Foo;
+    }
+
+    #[test]
+    #[should_panic]
+    #[allow(unreachable_code)]
+    fn fails_if_closure_panics() {
+        proptest!(|(_ in 0..1)| {
+            panic!()
+        });
     }
 }
