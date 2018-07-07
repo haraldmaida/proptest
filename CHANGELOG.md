@@ -1,3 +1,23 @@
+## 0.8.3
+
+### Bug Fixes
+
+- Fix that regex-based string generation could transpose the order of a literal
+  and a non-literal component.
+
+## 0.8.2
+
+### New Additions
+
+- Macros which previously accepted `pattern in strategy` syntax to specify
+  arguments now also accept `pattern: type` syntax as shorthand for
+  `pattern in any::<type>()`.
+
+- Closure-style `proptest!` invocation no longer requires the body to use block
+  syntax.
+
+- Closure-style `proptest!` invocation now accepts custom configurations.
+
 ## 0.8.1
 
 ### New Additions
