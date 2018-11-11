@@ -8,6 +8,7 @@
 // except according to those terms.
 
 use std_facade::Box;
+use core::u32;
 
 #[cfg(feature = "std")]
 use std::env;
@@ -21,6 +22,7 @@ use std::str::FromStr;
 use test_runner::FailurePersistence;
 #[cfg(feature = "std")]
 use test_runner::FileFailurePersistence;
+use test_runner::result_cache::{noop_result_cache, ResultCache};
 
 #[cfg(feature = "std")]
 const CASES: &str = "PROPTEST_CASES";
@@ -30,10 +32,16 @@ const MAX_LOCAL_REJECTS: &str = "PROPTEST_MAX_LOCAL_REJECTS";
 const MAX_GLOBAL_REJECTS: &str = "PROPTEST_MAX_GLOBAL_REJECTS";
 #[cfg(feature = "std")]
 const MAX_FLAT_MAP_REGENS: &str = "PROPTEST_MAX_FLAT_MAP_REGENS";
+#[cfg(feature = "std")]
+const MAX_SHRINK_TIME: &str = "PROPTEST_MAX_SHRINK_TIME";
+#[cfg(feature = "std")]
+const MAX_SHRINK_ITERS: &str = "PROPTEST_MAX_SHRINK_ITERS";
 #[cfg(feature = "fork")]
 const FORK: &str = "PROPTEST_FORK";
 #[cfg(feature = "timeout")]
 const TIMEOUT: &str = "PROPTEST_TIMEOUT";
+#[cfg(feature = "std")]
+const VERBOSE: &str = "PROPTEST_VERBOSE";
 
 #[cfg(feature = "std")]
 fn contextualize_config(mut result: Config) -> Config {
@@ -74,6 +82,12 @@ fn contextualize_config(mut result: Config) -> Config {
             #[cfg(feature = "timeout")]
             TIMEOUT => parse_or_warn(
                 &value, &mut result.timeout, "timeout", TIMEOUT),
+            MAX_SHRINK_TIME => parse_or_warn(
+                &value, &mut result.max_shrink_time, "u32", MAX_SHRINK_TIME),
+            MAX_SHRINK_ITERS => parse_or_warn(
+                &value, &mut result.max_shrink_iters, "u32", MAX_SHRINK_ITERS),
+            VERBOSE => parse_or_warn(
+                &value, &mut result.verbose, "u32", VERBOSE),
 
             _ => if var.starts_with("PROPTEST_") {
                 eprintln!("proptest: Ignoring unknown env-var {}.", var);
@@ -103,6 +117,12 @@ lazy_static! {
             fork: false,
             #[cfg(feature = "timeout")]
             timeout: 0,
+            #[cfg(feature = "std")]
+            max_shrink_time: 0,
+            max_shrink_iters: u32::MAX,
+            result_cache: noop_result_cache,
+            #[cfg(feature = "std")]
+            verbose: 0,
             _non_exhaustive: (),
         };
 
@@ -203,10 +223,72 @@ pub struct Config {
     ///
     /// This requires the "timeout" feature, enabled by default.
     ///
+    /// Setting a timeout to less than the time it takes the process to start
+    /// up and initialise the first test case will cause the whole test to be
+    /// aborted.
+    ///
     /// The default is `0` (i.e., no timeout), which can be overridden by
     /// setting the `PROPTEST_TIMEOUT` environment variable.
     #[cfg(feature = "timeout")]
     pub timeout: u32,
+
+    /// If non-zero, give up the shrinking process after this many milliseconds
+    /// have elapsed since the start of the shrinking process.
+    ///
+    /// This will not cause currently running test cases to be interrupted.
+    ///
+    /// This configuration is only available when the `std` feature is enabled
+    /// (which it is by default).
+    ///
+    /// The default is `0` (i.e., no limit), which can be overridden by setting
+    /// the `PROPTEST_MAX_SHRINK_TIME` environment variable.
+    #[cfg(feature = "std")]
+    pub max_shrink_time: u32,
+
+    /// Give up on shrinking if more than this number of iterations of the test
+    /// code are run.
+    ///
+    /// Setting this value to `0` disables shrinking altogether.
+    ///
+    /// The default is `std::u32::MAX`, which can be overridden by setting the
+    /// `PROPTEST_MAX_SHRINK_ITERS` environment variable.
+    pub max_shrink_iters: u32,
+
+    /// A function to create new result caches.
+    ///
+    /// The default is to do no caching. The easiest way to enable caching is
+    /// to set this field to `basic_result_cache` (though that is currently
+    /// only available with the `std` feature).
+    ///
+    /// This is useful for strategies which have a tendency to produce
+    /// duplicate values, or for tests where shrinking can take a very long
+    /// time due to exploring the same output multiple times.
+    ///
+    /// When caching is enabled, generated values themselves are not stored, so
+    /// this does not pose a risk of memory exhaustion for large test inputs
+    /// unless using extraordinarily large test case counts.
+    ///
+    /// Caching incurs its own overhead, and may very well make your test run
+    /// more slowly.
+    pub result_cache: fn () -> Box<dyn ResultCache>,
+
+    /// Set to non-zero values to cause proptest to emit human-targeted
+    /// messages to stderr as it runs.
+    ///
+    /// Greater values cause greater amounts of logs to be emitted. The exact
+    /// meaning of certain levels other than 0 is subject to change.
+    ///
+    /// - 0: No extra output.
+    /// - 1: Log test failure messages.
+    /// - 2: Trace low-level details.
+    ///
+    /// This is only available with the `std` feature (enabled by default)
+    /// since on nostd proptest has no way to produce output.
+    ///
+    /// The default is `0`, which can be overridden by setting the
+    /// `PROPTEST_VERBOSE` environment variable.
+    #[cfg(feature = "std")]
+    pub verbose: u32,
 
     // Needs to be public so FRU syntax can be used.
     #[doc(hidden)]

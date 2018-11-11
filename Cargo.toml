@@ -1,11 +1,11 @@
 [package]
 name = "proptest"
-version = "0.8.3"
+version = "0.8.7"
 authors = ["Jason Lingle"]
 license = "MIT/Apache-2.0"
 readme = "README.md"
 repository = "https://github.com/altsysrq/proptest"
-documentation = "https://altsysrq.github.io/rustdoc/proptest/0.8.3/proptest/"
+documentation = "https://altsysrq.github.io/rustdoc/proptest/0.8.7/proptest/"
 keywords = ["property", "testing", "quickcheck", "fuzz", "hypothesis"]
 categories = ["development-tools::testing"]
 
@@ -23,7 +23,7 @@ service = "github"
 
 [features]
 
-default = ["std", "fork", "timeout"]
+default = ["std", "fork", "timeout", "bit-set"]
 
 # Enables unstable features of Rust.
 unstable = ["rand/i128_support"]
@@ -34,7 +34,7 @@ unstable = ["rand/i128_support"]
 nightly = ["lazy_static/spin_no_std"]
 
 # Enables the use of standard-library dependent feature
-std = ["rand/std", "bit-set/std", "byteorder/std",
+std = ["rand/std", "byteorder/std",
        "quick-error", "regex-syntax", "num-traits/std"]
 
 # For use in no_std environments with access to an allocator
@@ -78,7 +78,9 @@ optional = true
 
 [dependencies.bit-set]
 version = "0.5.0"
-default-features = false
+# It doesn't currently work with no_std
+# default-features = false
+optional = true
 
 [dependencies.rand]
 version = "0.5.0"
@@ -90,7 +92,7 @@ version = "1.2.3"
 default-features = false
 
 [dependencies.rusty-fork]
-version = "0.2"
+version = "0.2.1"
 optional = true
 default-features = false
 

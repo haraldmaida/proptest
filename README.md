@@ -85,7 +85,7 @@ In `Cargo.toml`, add
 
 ```toml
 [dev-dependencies]
-proptest = "0.8.3"
+proptest = "0.8.7"
 ```
 
 and at the top of `main.rs` or `lib.rs`:
@@ -381,7 +381,9 @@ use proptest::prelude::*;
 
 proptest! {
     #[test]
-    fn i64_abs_is_never_negative(a in any::<i64>()) {
+    fn i64_abs_is_never_negative(a: i64) {
+        // This actually fails if a == i64::MIN, but randomly picking one
+        // specific value out of 2⁶⁴ is overwhelmingly unlikely.
         assert!(a.abs() >= 0);
     }
 }
@@ -480,7 +482,7 @@ proptest! {
     })]
 
     #[test]
-    fn test_fib(n in any::<u64>()) {
+    fn test_fib(n: u64) {
         // For large n, this will variously run for an extremely long time,
         // overflow the stack, or panic due to integer overflow.
         assert!(fib(n) >= n);

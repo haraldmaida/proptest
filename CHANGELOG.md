@@ -1,3 +1,90 @@
+## 0.8.7
+
+### New Additions
+
+- Add `max_shrink_iters` and `max_shrink_time` options to test configuration to
+  allow capping the resources expended on shrinking test cases.
+
+- Add `verbose` option to make proptest give details about what is happening as
+  the test executes.
+
+- When a failure is saved to the persistence file, the message now also
+  includes the seed that was saved so that it can manually be added to the
+  appropriate file should the test have run somewhere where the updated file is
+  not accessible (for example, on a CI system).
+
+### Bug Fixes
+
+- `any::<SystemTime>()` now generates random values centred on the UNIX epoch
+  rather than always producing the current time.
+
+### Other Notes
+
+- When using forking, proptest will now detect conditions which cause the child
+  process to crash without running any tests, and will fail quickly instead of
+  respawning child processes.
+
+## 0.8.6
+
+### New Additions
+
+- `Vec<S> where S: Strategy` is now itself a `Strategy` for producing
+  fixed-size `Vec`s whose values are derived from the respective strategies.
+
+- It is now possible to configure the test runner to cache test results to
+  avoid spending time running identical tests. See `Config.result_cache`.
+
+- Add `sample::Index`, a type for generating indices into runtime-sized slices
+  and vectors.
+
+- Add `sample::Selector`, a type for picking items out of dynamically-created
+  iterables.
+
+### Bug Fixes
+
+- Fix panic when using `sample::subsequence` with an empty vector.
+
+- Fix panic when using `sample::subsequence` with a size equal to the size of
+  the input vector.
+
+- Fix sampled bitset strategies on integers not allowing to generate exactly
+  the same number of bits as the integer is wide.
+
+### Other Notes
+
+- Passing empty size ranges to functions requiring a non-empty size range now
+  panic with an explicit message immediately rather than causing an arithmetic
+  error when generating input values.
+
+- There were a few cases where proptest would accept a `SizeRange` with an
+  inclusive maximum value of `usize::MAX`. Size ranges are now always clamped
+  to `usize::MAX - 1`.
+
+## 0.8.5
+
+### Bug Fixes
+
+- Fix build when nightly features are enabled.
+
+## 0.8.4
+
+### Bug Fixes
+
+- Nightly and no_std support work against latest nightly once again.
+
+### New Additions
+
+- Added `bits::bool_vec` for generating `Vec<bool>` as a bit set.
+
+### Nightly-only breakage
+
+- `impl Arbitrary for CollectionAllocErr` is temporarily removed pending it
+  being available outside the `alloc` crate again.
+
+- `bits::bitset` is no longer available without the `bit-set` feature (enabled
+  by default), which is [not compatible with `#[no_std]`
+  environments](https://github.com/contain-rs/bit-vec/pull/51).
+
 ## 0.8.3
 
 ### Bug Fixes

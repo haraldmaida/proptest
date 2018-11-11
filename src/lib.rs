@@ -93,7 +93,7 @@
 //!
 //! ```toml
 //! [dev-dependencies]
-//! proptest = "0.8.3"
+//! proptest = "0.8.7"
 //! ```
 //!
 //! and at the top of `main.rs` or `lib.rs`:
@@ -397,7 +397,9 @@
 //!     # /* NOREADME
 //!     #[test]
 //!     # NOREADME */
-//!     fn i64_abs_is_never_negative(a in any::<i64>()) {
+//!     fn i64_abs_is_never_negative(a: i64) {
+//!         // This actually fails if a == i64::MIN, but randomly picking one
+//!         // specific value out of 2⁶⁴ is overwhelmingly unlikely.
 //!         assert!(a.abs() >= 0);
 //!     }
 //! }
@@ -500,7 +502,7 @@
 //! # /* NOREADME
 //!     #[test]
 //! # NOREADME */
-//!     fn test_fib(n in any::<u64>()) {
+//!     fn test_fib(n: u64) {
 //!         // For large n, this will variously run for an extremely long time,
 //!         // overflow the stack, or panic due to integer overflow.
 //!         assert!(fib(n) >= n);
@@ -851,7 +853,7 @@
 //! combine their values into one value that holds each input separately. There
 //! are several of these. The simplest is a tuple; a tuple of strategies is
 //! itself a strategy for tuples of the values those strategies produce. For
-//! example, `(0..10i32,100..1000i32)` is a strategy for pairs of integers
+//! example, `(0..100i32,100..1000i32)` is a strategy for pairs of integers
 //! where the first value is between 0 and 100 and the second is between 100
 //! and 1000.
 //!
@@ -883,9 +885,10 @@
 //! # fn main() { test_add(); }
 //! ```
 //!
-//! Other compound strategies include fixed-sizes arrays of strategies, as well
-//! as the various strategies provided in the [collection](collection/index.html)
-//! module.
+//! Other compound strategies include fixed-sizes arrays of strategies and
+//! `Vec`s of strategies (which produce arrays or `Vec`s of values parallel to
+//! the strategy collection), as well as the various strategies provided in the
+//! [collection](collection/index.html) module.
 //!
 //! ### Syntax Sugar: `proptest!`
 //!
@@ -1651,21 +1654,19 @@
 ))]
 #![cfg_attr(feature = "unstable", feature(
     allocator_api,
-    thread_local_state,
     try_trait,
     generator_trait,
     try_from,
     integer_atomics,
-    mpsc_select,
-    ip,
-    iterator_step_by,
-    io,
     never_type,
     try_reserve
 ))]
+#![cfg_attr(all(feature = "std", feature = "unstable"), feature(
+    mpsc_select,
+    ip
+))]
 #![cfg_attr(all(feature = "alloc", not(feature = "std")), feature(
     alloc,
-    core_float,
     core_intrinsics
 ))]
 
@@ -1702,6 +1703,7 @@ mod product_tuple;
 
 #[macro_use]
 extern crate bitflags;
+#[cfg(feature = "bit-set")]
 extern crate bit_set;
 #[macro_use]
 extern crate lazy_static;
