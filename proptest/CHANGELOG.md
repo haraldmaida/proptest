@@ -1,3 +1,22 @@
+## Unreleased
+
+### Breaking Changes
+
+- The version of the `rand` crate has been increased to 0.7.
+
+## 0.9.6
+
+### Bug Fixes
+
+- Fixed [#186](https://github.com/AltSysrq/proptest/issues/186),
+  a Rust future-compatibility issue.
+
+## 0.9.5
+
+### Bug Fixes
+
+- Fixed a Rust future-compatibility issue (https://github.com/rust-lang/rust/pull/65819).
+
 ## 0.9.4
 
 ### Bug Fixes
