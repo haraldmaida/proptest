@@ -55,8 +55,9 @@ impl Default for StringParam {
 }
 
 // quick_error! uses bare trait objects, so we enclose its invocation here in a
-// module so the lint can be disabled just for it.
-#[allow(bare_trait_objects)]
+// module so the lint can be disabled just for it. Also suppress deprecation
+// due to .description().
+#[allow(bare_trait_objects, deprecated)]
 mod error_container {
     use super::*;
 
@@ -112,7 +113,7 @@ type ParseResult<T> = Result<RegexGeneratorStrategy<T>, Error>;
 /// generating the type.
 ///
 /// This trait exists for the benefit of `#[proptest(regex = "...")]`.
-/// It is semver extempt, so use at your own risk.
+/// It is semver exempt, so use at your own risk.
 /// If you found a use for the trait beyond `Vec<u8>` and `String`,
 /// please file an issue at https://github.com/AltSysrq/proptest.
 pub trait StrategyFromRegex: Sized + fmt::Debug {
@@ -294,7 +295,7 @@ impl<'a, I: Iterator<Item = &'a Hir>> Iterator for ConcatIter<'a, I> {
                 // A literal. Accumulate:
                 Literal(Unicode(scalar)) => self.buf.extend(to_bytes(*scalar)),
                 Literal(Byte(byte)) => self.buf.push(*byte),
-                // Ecountered a non-literal.
+                // Encountered a non-literal.
                 _ => {
                     return if !self.buf.is_empty() {
                         // We've accumulated a literal from before, flush it out.
